@@ -37,7 +37,7 @@ class MailChimp
     public function __construct($api_key, $api_endpoint = null)
     {
         $this->api_key = $api_key;
-        
+
         if ($api_endpoint === null) {
             if (strpos($this->api_key, '-') === false) {
                 throw new \Exception("Invalid MailChimp API key `{$api_key}` supplied.");
@@ -202,13 +202,19 @@ class MailChimp
             'timeout' => $timeout,
         );
 
+        $httpHeader = array(
+            "Accept: application/vnd.api+json",
+            "Content-Type: application/vnd.api+json",
+            "Authorization: apikey " . $this->api_key
+        );
+
+        if (isset($args["language"])) {
+            $httpHeader[] = "Accept-Language: " . $args["language"];
+        }
+
         $ch = curl_init();
         curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-            'Accept: application/vnd.api+json',
-            'Content-Type: application/vnd.api+json',
-            'Authorization: apikey ' . $this->api_key
-        ));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $httpHeader);
         curl_setopt($ch, CURLOPT_USERAGENT, 'DrewM/MailChimp-API/3.0 (github.com/drewm/mailchimp-api)');
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_VERBOSE, true);
@@ -244,15 +250,15 @@ class MailChimp
                 $this->attachRequestPayload($ch, $args);
                 break;
         }
-        
+
         $responseContent = curl_exec($ch);
-        
+
         $response['headers'] = curl_getinfo($ch);
         if ($responseContent === false) {
             $this->last_error = curl_error($ch);
         } else {
             $headerSize = $response['headers']['header_size'];
-            
+
             $response['httpHeaders'] = $this->getHeadersAsArray(substr($responseContent, 0, $headerSize));
             $response['body'] = substr($responseContent, $headerSize);
 
@@ -280,37 +286,37 @@ class MailChimp
 
     /**
      * Get the HTTP headers as an array of header-name => header-value pairs.
-     * 
+     *
      * The "Link" header is parsed into an associative array based on the
      * rel names it contains. The original value is available under
      * the "_raw" key.
-     * 
+     *
      * @param string $headersAsString
      * @return array
      */
     private function getHeadersAsArray($headersAsString)
     {
         $headers = array();
-        
+
         foreach (explode("\r\n", $headersAsString) as $i => $line) {
             if ($i === 0) { // HTTP code
                 continue;
             }
-            
+
             $line = trim($line);
             if (empty($line)) {
                 continue;
             }
-            
+
             list($key, $value) = explode(': ', $line);
-            
+
             if ($key == 'Link') {
                 $value = array_merge(
                     array('_raw' => $value),
                     $this->getLinkHeaderAsArray($value)
                 );
             }
-            
+
             $headers[$key] = $value;
         }
 
@@ -319,25 +325,25 @@ class MailChimp
 
     /**
      * Extract all rel => URL pairs from the provided Link header value
-     * 
+     *
      * Mailchimp only implements the URI reference and relation type from
      * RFC 5988, so the value of the header is something like this:
-     * 
+     *
      * 'https://us13.api.mailchimp.com/schema/3.0/Lists/Instance.json; rel="describedBy", <https://us13.admin.mailchimp.com/lists/members/?id=XXXX>; rel="dashboard"'
-     * 
+     *
      * @param string $linkHeaderAsString
      * @return array
      */
     private function getLinkHeaderAsArray($linkHeaderAsString)
     {
         $urls = array();
-        
+
         if (preg_match_all('/<(.*?)>\s*;\s*rel="(.*?)"\s*/', $linkHeaderAsString, $matches)) {
             foreach ($matches[2] as $i => $relName) {
                 $urls[$relName] = $matches[1][$i];
             }
         }
-        
+
         return $urls;
     }
 
